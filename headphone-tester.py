@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Headphone Tester - CLI tool to test USB and line-input headphones on Linux."""
 
+import argparse
 import sys
 import time
 import threading
@@ -59,9 +60,16 @@ def list_devices():
     print()
 
 
+def get_samplerate(device=None, kind="output"):
+    """Get the default sample rate for a device."""
+    dev = device if device is not None else sd.default.device[0 if kind == "input" else 1]
+    info = sd.query_devices(dev)
+    return int(info["default_samplerate"])
+
+
 def play_tone(freq=440, duration=2.0):
     """Play a sine wave tone."""
-    samplerate = 44100
+    samplerate = get_samplerate(output_device)
     t = np.linspace(0, duration, int(samplerate * duration), endpoint=False)
 
     # Apply fade in/out to avoid clicks (10ms)
@@ -86,7 +94,7 @@ def play_channel_test(channel):
     """Play tone in left (0) or right (1) channel only."""
     freq = 440
     duration = 2.0
-    samplerate = 44100
+    samplerate = get_samplerate(output_device)
     t = np.linspace(0, duration, int(samplerate * duration), endpoint=False)
 
     fade_samples = int(samplerate * 0.01)
@@ -109,7 +117,7 @@ def play_channel_test(channel):
 
 def play_sweep(duration=5.0):
     """Logarithmic frequency sweep from 20Hz to 20kHz."""
-    samplerate = 44100
+    samplerate = get_samplerate(output_device)
     n_samples = int(samplerate * duration)
     t = np.linspace(0, duration, n_samples, endpoint=False)
 
@@ -133,7 +141,7 @@ def play_sweep(duration=5.0):
 
 def mic_level_meter():
     """Show real-time ASCII VU meter of mic input."""
-    samplerate = 44100
+    samplerate = get_samplerate(input_device, kind="input")
     block_size = 1024
     bar_width = 50
 
@@ -164,7 +172,7 @@ def mic_level_meter():
 
 def mic_loopback():
     """Pass microphone input through to headphones in real-time."""
-    samplerate = 44100
+    samplerate = get_samplerate(output_device)
     block_size = 256  # Low block size for minimal latency
 
     print(f"  Loopback: mic → headphones (latency ~{block_size/samplerate*1000:.0f}ms, Ctrl+C to stop)")
@@ -195,6 +203,42 @@ def mic_loopback():
                 time.sleep(0.05)
     except KeyboardInterrupt:
         print("\n  Stopped.")
+
+
+def select_by_type(device_type):
+    """Auto-select input/output devices by type ('usb' or 'line')."""
+    global input_device, output_device
+    devices = sd.query_devices()
+    found_out = None
+    found_in = None
+
+    for i, dev in enumerate(devices):
+        name_lower = dev["name"].lower()
+        is_usb = "usb" in name_lower
+        if device_type == "usb" and not is_usb:
+            continue
+        if device_type == "line" and is_usb:
+            continue
+        if found_out is None and dev["max_output_channels"] > 0:
+            found_out = i
+        if found_in is None and dev["max_input_channels"] > 0:
+            found_in = i
+
+    if found_out is None and found_in is None:
+        print(f"  No {device_type} devices found.")
+        return
+
+    if found_out is not None:
+        output_device = found_out
+        print(f"  Output device set to: {devices[found_out]['name']} (#{found_out})")
+    else:
+        print(f"  No {device_type} output device found.")
+
+    if found_in is not None:
+        input_device = found_in
+        print(f"  Input device set to: {devices[found_in]['name']} (#{found_in})")
+    else:
+        print(f"  No {device_type} input device found.")
 
 
 def set_device(kind, dev_id):
@@ -230,13 +274,26 @@ def print_help():
     loopback         Mic→headphone passthrough (Ctrl+C to stop)
     output [id]      Set output device
     input [id]       Set input device
+    use <line|usb>   Select devices by type
     help             Show this help
     quit             Exit
 """)
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Headphone Tester")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--usb", action="store_true", help="Start with USB devices selected")
+    group.add_argument("--line", action="store_true", help="Start with line (non-USB) devices selected")
+    cli_args = parser.parse_args()
+
     print("\n  === Headphone Tester ===")
+
+    if cli_args.usb:
+        select_by_type("usb")
+    elif cli_args.line:
+        select_by_type("line")
+
     print_help()
 
     while True:
@@ -281,6 +338,11 @@ def main():
                     print("  Usage: input <device_id>")
                 else:
                     set_device("input", args[0])
+            elif cmd == "use":
+                if not args or args[0].lower() not in ("usb", "line"):
+                    print("  Usage: use <line|usb>")
+                else:
+                    select_by_type(args[0].lower())
             elif cmd in ("help", "?"):
                 print_help()
             elif cmd in ("quit", "exit", "q"):

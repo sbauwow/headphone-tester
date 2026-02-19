@@ -16,6 +16,13 @@ Uses PortAudio under the hood, so it works with PipeWire, PulseAudio, and ALSA.
 ~/headphone-tester/.venv/bin/python ~/headphone-tester/headphone-tester.py
 ```
 
+Pre-select devices on launch:
+
+```bash
+~/headphone-tester/.venv/bin/python ~/headphone-tester/headphone-tester.py --usb
+~/headphone-tester/.venv/bin/python ~/headphone-tester/headphone-tester.py --line
+```
+
 Or add an alias to your shell rc:
 
 ```bash
@@ -57,7 +64,21 @@ Markers in brackets:
 
 ### Step 2: Select Your Headphones
 
-By default, audio goes to whatever your system default is. If you plugged in USB headphones, find their device number from `devices` and select them:
+By default, audio goes to whatever your system default is. The quickest way to switch is by type:
+
+```
+> use usb
+  Output device set to: USB Audio Device (hw:2,0) (#3)
+  Input device set to: USB Audio Device (hw:2,0) (#3)
+
+> use line
+  Output device set to: HDA Intel PCH: SN6140 Analog (hw:0,0) (#0)
+  Input device set to: HDA Intel PCH: SN6140 Analog (hw:0,0) (#0)
+```
+
+You can also do this at launch with `--usb` or `--line` (see Quick Start above).
+
+For manual control, set devices by their numeric ID from `devices`:
 
 ```
 > output 3
@@ -176,6 +197,7 @@ Press **Ctrl+C** to stop.
 | `loopback` | | Mic-to-headphone passthrough |
 | `output` | `<device_id>` | Set output device by index |
 | `input` | `<device_id>` | Set input device by index |
+| `use` | `<line\|usb>` | Select input+output devices by type |
 | `help` | | Show command list |
 | `quit` | | Exit (`q` and `exit` also work) |
 
